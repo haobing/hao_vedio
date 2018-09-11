@@ -89,11 +89,11 @@ int main()
     pFrame = av_frame_alloc();
     pFrameRGB = av_frame_alloc();
 
-    img_convert_ctx = sws_getContext(pCodecCtx->width,pCodecCtx->height,pCodecCtx->pix_fmt,pCodecCtx->width,pCodecCtx->height,PIX_FMT_RGB24,SWS_BICUBIC,NULL,NULL,NULL);
+    img_convert_ctx = sws_getContext(pCodecCtx->width,pCodecCtx->height,pCodecCtx->pix_fmt,pCodecCtx->width,pCodecCtx->height,PIX_FMT_RGB24,SWS_BICUBIC,NULL,NULL,NULL);//初始化
 
     numBytes = avpicture_get_size(PIX_FMT_RGB24,pCodecCtx->width,pCodecCtx->height);
     out_buffer = (unsigned char*)av_malloc(numBytes*sizeof(unsigned char));
-    avpicture_fill((AVPicture*)pFrameRGB,out_buffer,PIX_FMT_RGB24,pCodecCtx->width,pCodecCtx->height);
+    avpicture_fill((AVPicture*)pFrameRGB,out_buffer,PIX_FMT_RGB24,pCodecCtx->width,pCodecCtx->height);//将pFrameRGB指向out_buffer空间
 
     int y_size = pCodecCtx->width*pCodecCtx->height;
     packet = (AVPacket*)malloc(sizeof(AVPacket));
@@ -104,13 +104,13 @@ int main()
     int index = 0;
     while(1)
     {
-        if(av_read_frame(pFormatCtx,packet)<0)
+        if(av_read_frame(pFormatCtx,packet)<0)//读取一帧数据
         {
             break;
         }
         if(packet->stream_index == videoStream)
         {
-            ret = avcodec_decode_video2(pCodecCtx,pFrame,&got_picture,packet);
+            ret = avcodec_decode_video2(pCodecCtx,pFrame,&got_picture,packet);//解码数据放入pFrame
 
             if(ret<0)
             {
