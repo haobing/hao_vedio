@@ -1,0 +1,163 @@
+#include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
+#include "libavutil/pixfmt.h"
+#include "libswscale/swscale.h"
+#include<stdio.h>
+
+void SaveFrame(AVFrame *pFrame,int width,int height,int index)
+{
+    FILE *pFile;
+    char szFilename[32];
+    int y;
+    sprintf(szFilename,"frame%d.ppm",index);
+    pFile = fopen(szFilename,"wb");
+
+    if(pFile == NULL)
+    {
+        return;
+    }
+
+    fprintf(pFile,"P6 %d %d 255",width,height);
+    for(y = 0;y<height; y++)
+    {
+        fwrite(pFrame->data[0]+y*pFrame->linesize[0],1,width*3,pFile);
+    }
+    fclose(pFile);
+}
+
+int main()
+{
+    char *file_path = "pra.mp4";
+    AVFormatContext *pFormatCtx;
+    AVCodecContext *pCodecCtx;
+    AVCodec *pCodec;
+    AVFrame *pFrame,*pFrameRGB;
+    AVPacket *packet;
+    unsigned char *out_buffer;
+
+    static struct SwsContext *img_convert_ctx;
+
+    int videoStream,i,numBytes;
+    int ret,got_picture;
+
+    av_register_all();//注册编解码器、复用和解复用器
+
+    pFormatCtx = avformat_alloc_context();//为AVFormatContext结构体分配空间
+
+    if(avformat_open_input(&pFormatCtx,file_path,NULL,NULL)!=0)//打开音视频文件
+    {
+        printf("can't open the file\n");
+        return -1;
+    }
+
+    if(avformat_find_stream_info(pFormatCtx,NULL)<0)
+    {
+        printf("can't find stream infomation\n");
+        return -1;
+    }
+
+    videoStream = -1;
+
+    for(i = 0; i<pFormatCtx->nb_streams;i++)
+    {
+        if(pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+        {
+            videoStream = i;
+        }
+    }
+
+    if(videoStream == -1)
+    {
+        printf("can't find a video stream\n");
+        return -1;
+    }
+
+    pCodecCtx = pFormatCtx->streams[videoStream]->codec;
+    pCodec = avcodec_find_decoder(pCodecCtx->codec_id);
+    if(pCodec == NULL)
+    {
+        printf("can't find codec\n");
+        return -1;
+    }
+
+    if(avcodec_open2(pCodecCtx,pCodec,NULL)<0)
+    {
+        printf("can't open codec\n");
+        return -1;
+    }
+
+    pFrame = av_frame_alloc();
+    pFrameRGB = av_frame_alloc();
+
+    img_convert_ctx = sws_getContext(pCodecCtx->width,pCodecCtx->height,pCodecCtx->pix_fmt,pCodecCtx->width,pCodecCtx->height,PIX_FMT_RGB24,SWS_BICUBIC,NULL,NULL,NULL);
+
+    numBytes = avpicture_get_size(PIX_FMT_RGB24,pCodecCtx->width,pCodecCtx->height);
+    out_buffer = (unsigned char*)av_malloc(numBytes*sizeof(unsigned char));
+    avpicture_fill((AVPicture*)pFrameRGB,out_buffer,PIX_FMT_RGB24,pCodecCtx->width,pCodecCtx->height);
+
+    int y_size = pCodecCtx->width*pCodecCtx->height;
+    packet = (AVPacket*)malloc(sizeof(AVPacket));
+    av_new_packet(packet,y_size);//为packet->buf分配空间
+
+    av_dump_format(pFormatCtx, 0, file_path,0);//手工调试函数
+
+    int index = 0;
+    while(1)
+    {
+        if(av_read_frame(pFormatCtx,packet)<0)
+        {
+            break;
+        }
+        if(packet->stream_index == videoStream)
+        {
+            ret = avcodec_decode_video2(pCodecCtx,pFrame,&got_picture,packet);
+
+            if(ret<0)
+            {
+                printf("decode error\n");
+                return -1;
+            }
+
+            if(got_picture)
+            {
+                sws_scale(img_convert_ctx,(unsigned char const *const *)pFrame->data,pFrame->linesize,0,pCodecCtx->height,pFrameRGB->data,pFrameRGB->linesize);//处理图像数据
+                SaveFrame(pFrameRGB,pCodecCtx->width,pCodecCtx->height,index++);
+                if(index>5)
+                return 0;
+            }
+        }
+        av_free_packet(packet);
+    }
+    av_free(out_buffer);
+    av_free(pFrameRGB);
+    avcodec_close(pCodecCtx);
+    avformat_close_input(&pFormatCtx);
+    return 0;
+}
+
+#if 0
+使用ffmpeg步骤
+av_register_all();//初始化ffmpeg库，如果系统里面的ffmpeg没配置好这里会出错
+ if (isNetwork) {
+     //需要播放网络视频
+     avformat_network_init();
+ }
+ avformat_open_input();//打开视频文件
+ avformat_find_stream_info();//查找文件的流信息
+ av_dump_format();//dump只是个调试函数，输出文件的音、视频流的基本信息了，帧率、分辨率、音频采样等等
+ for(...);//遍历文件的各个流，找到第一个视频流，并记录该流的编码信息
+ sws_getContext();//根据编码信息设置渲染格式
+ avcodec_find_decoder();//在库里面查找支持该格式的解码器
+ avcodec_open2();//打开解码器
+ pFrame=avcodec_alloc_frame();//分配一个帧指针，指向解码后的原始帧
+ pFrameRGB=avcodec_alloc_frame();//分配一个帧指针，指向存放转换成RGB后的帧
+ avpicture_fill(pFrameRGB);//给pFrameRGB帧加上分配的内存;
+ while(true)
+ {
+     av_read_frame();//读取一个帧（到最后帧则break）
+     avcodec_decode_video2();//解码该帧
+     sws_getCachedContext()sws_scale（）;//把该帧转换（渲染）成RGB
+     SaveFrame();//对前5帧保存成ppm图形文件(这个是自定义函数，非API)
+     av_free_packet();//释放本次读取的帧内存
+ }
+ #endif
