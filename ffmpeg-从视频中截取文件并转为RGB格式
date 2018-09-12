@@ -1,3 +1,4 @@
+.mp4文件-读取流-解码出YUV图片-转为RGB-保存
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
 #include "libavutil/pixfmt.h"
