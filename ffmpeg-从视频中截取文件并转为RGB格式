@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
         }
 
         if (packet->stream_index == videoStream) {
-            //解码
+            //解码的YUV数据存放在pFrame中
             ret = avcodec_decode_video2(pCodecCtx, pFrame, &got_picture,packet);
 
             if (ret < 0) {
