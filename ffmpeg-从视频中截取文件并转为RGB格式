@@ -3,127 +3,158 @@
 #include "libavutil/pixfmt.h"
 #include "libswscale/swscale.h"
 #include<stdio.h>
-
-void SaveFrame(AVFrame *pFrame,int width,int height,int index)
+void SaveFrame(AVFrame *pFrame, int width, int height,int index)
 {
-    FILE *pFile;
-    char szFilename[32];
-    int y;
-    sprintf(szFilename,"frame%d.ppm",index);
-    pFile = fopen(szFilename,"wb");
 
-    if(pFile == NULL)
-    {
-        return;
-    }
+  FILE *pFile;
+  char szFilename[32];
+  int  y;
 
-    fprintf(pFile,"P6 %d %d 255",width,height);
-    for(y = 0;y<height; y++)
-    {
-        fwrite(pFrame->data[0]+y*pFrame->linesize[0],1,width*3,pFile);
-    }
-    fclose(pFile);
+  // Open file
+  sprintf(szFilename, "frame%d.ppm", index);
+  pFile=fopen(szFilename, "wb");
+
+  if(pFile==NULL)
+    return;
+
+  // Write header
+  fprintf(pFile, "P6\n%d %d\n255\n", width, height);
+
+  // Write pixel data
+  for(y=0; y<height; y++)
+  {
+      //每个像素3个字节，一次写入一行的像素数据
+    fwrite(pFrame->data[0]+y*pFrame->linesize[0], 1, width*3, pFile);
+  }
+
+  // Close file
+  fclose(pFile);
+
 }
 
-int main()
+
+int main(int argc, char *argv[])
 {
     char *file_path = "pra.mp4";
+
     AVFormatContext *pFormatCtx;
     AVCodecContext *pCodecCtx;
     AVCodec *pCodec;
-    AVFrame *pFrame,*pFrameRGB;
+    AVFrame *pFrame, *pFrameRGB;
     AVPacket *packet;
-    unsigned char *out_buffer;
+    uint8_t *out_buffer;
 
     static struct SwsContext *img_convert_ctx;
 
-    int videoStream,i,numBytes;
-    int ret,got_picture;
+    int videoStream, i, numBytes;
+    int ret, got_picture;
 
-    av_register_all();//注册编解码器、复用和解复用器
+    av_register_all(); //初始化FFMPEG  调用了这个才能正常适用编码器和解码器
 
-    pFormatCtx = avformat_alloc_context();//为AVFormatContext结构体分配空间
+    //Allocate an AVFormatContext.
+    pFormatCtx = avformat_alloc_context();
 
-    if(avformat_open_input(&pFormatCtx,file_path,NULL,NULL)!=0)//打开音视频文件
-    {
-        printf("can't open the file\n");
+    if (avformat_open_input(&pFormatCtx, file_path, NULL, NULL) != 0) {
+        printf("can't open the file. \n");
         return -1;
     }
 
-    if(avformat_find_stream_info(pFormatCtx,NULL)<0)
-    {
-        printf("can't find stream infomation\n");
+    if (avformat_find_stream_info(pFormatCtx, NULL) < 0) {
+        printf("Could't find stream infomation.\n");
         return -1;
     }
 
     videoStream = -1;
 
-    for(i = 0; i<pFormatCtx->nb_streams;i++)
-    {
-        if(pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
-        {
+    ///循环查找视频中包含的流信息，直到找到视频类型的流
+    ///便将其记录下来 保存到videoStream变量中
+    ///这里我们现在只处理视频流  音频流先不管他
+    for (i = 0; i < pFormatCtx->nb_streams; i++) {
+        if (pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
             videoStream = i;
         }
     }
+    printf("nb_streams is %d\n",pFormatCtx->nb_streams);
 
-    if(videoStream == -1)
-    {
-        printf("can't find a video stream\n");
+    ///如果videoStream为-1 说明没有找到视频流
+    if (videoStream == -1) {
+        printf("Didn't find a video stream.\n");
         return -1;
     }
 
+    ///查找解码器
     pCodecCtx = pFormatCtx->streams[videoStream]->codec;
     pCodec = avcodec_find_decoder(pCodecCtx->codec_id);
-    if(pCodec == NULL)
-    {
-        printf("can't find codec\n");
+
+    if (pCodec == NULL) {
+        printf("Codec not found.\n");
         return -1;
     }
 
-    if(avcodec_open2(pCodecCtx,pCodec,NULL)<0)
-    {
-        printf("can't open codec\n");
+    ///打开解码器
+    if (avcodec_open2(pCodecCtx, pCodec, NULL) < 0) {
+        printf("Could not open codec.\n");
         return -1;
     }
+
+
+//分配内存给视频信息描述结构体
+
 
     pFrame = av_frame_alloc();
     pFrameRGB = av_frame_alloc();
+    //* Allocate and return an SwsContext. You need it to perform
+    //* scaling/conversion operations using sws_scale().
+    img_convert_ctx = sws_getContext(pCodecCtx->width, pCodecCtx->height,
+            pCodecCtx->pix_fmt, pCodecCtx->width, pCodecCtx->height,
+            AV_PIX_FMT_RGB24, SWS_BICUBIC, NULL, NULL, NULL);
 
-    img_convert_ctx = sws_getContext(pCodecCtx->width,pCodecCtx->height,pCodecCtx->pix_fmt,pCodecCtx->width,pCodecCtx->height,PIX_FMT_RGB24,SWS_BICUBIC,NULL,NULL,NULL);//初始化
+//计算视频一幅图像的大小
+    numBytes = avpicture_get_size(AV_PIX_FMT_RGB24, pCodecCtx->width,pCodecCtx->height);
 
-    numBytes = avpicture_get_size(PIX_FMT_RGB24,pCodecCtx->width,pCodecCtx->height);
-    out_buffer = (unsigned char*)av_malloc(numBytes*sizeof(unsigned char));
-    avpicture_fill((AVPicture*)pFrameRGB,out_buffer,PIX_FMT_RGB24,pCodecCtx->width,pCodecCtx->height);//将pFrameRGB指向out_buffer空间
+//给一幅图像分配内存
+    out_buffer = (uint8_t *) av_malloc(numBytes * sizeof(uint8_t));
 
-    int y_size = pCodecCtx->width*pCodecCtx->height;
-    packet = (AVPacket*)malloc(sizeof(AVPacket));
-    av_new_packet(packet,y_size);//为packet->buf分配空间
+    avpicture_fill((AVPicture *) pFrameRGB, out_buffer, AV_PIX_FMT_RGB24,
+            pCodecCtx->width, pCodecCtx->height);
+//计算一幅图像的尺寸，像素多少
+    int y_size = pCodecCtx->width * pCodecCtx->height;
+   // For video, it should typically contain one compressed frame. For audio it may
+   // * contain several compressed frames. 为一帧编码的原始视频数据分配内存
+//packet中保存的是一帧图像数据
+    packet = (AVPacket *) malloc(sizeof(AVPacket)); //分配一个packet
+    av_new_packet(packet, y_size); //分配packet的数据
 
-    av_dump_format(pFormatCtx, 0, file_path,0);//手工调试函数
+    av_dump_format(pFormatCtx, 0, file_path, 0); //输出视频信息
 
     int index = 0;
-    while(1)
-    {
-        if(av_read_frame(pFormatCtx,packet)<0)//读取一帧数据
-        {
-            break;
-        }
-        if(packet->stream_index == videoStream)
-        {
-            ret = avcodec_decode_video2(pCodecCtx,pFrame,&got_picture,packet);//解码数据放入pFrame
 
-            if(ret<0)
-            {
-                printf("decode error\n");
+    while (1)
+    {
+        //读取一帧数据，放入packet
+        if (av_read_frame(pFormatCtx, packet) < 0)
+        {
+            break; //这里认为视频读取完了
+        }
+
+        if (packet->stream_index == videoStream) {
+            //解码
+            ret = avcodec_decode_video2(pCodecCtx, pFrame, &got_picture,packet);
+
+            if (ret < 0) {
+                printf("decode error.\n");
                 return -1;
             }
-
-            if(got_picture)
-            {
-                sws_scale(img_convert_ctx,(unsigned char const *const *)pFrame->data,pFrame->linesize,0,pCodecCtx->height,pFrameRGB->data,pFrameRGB->linesize);//处理图像数据
-                SaveFrame(pFrameRGB,pCodecCtx->width,pCodecCtx->height,index++);
-                if(index>5)
-                return 0;
+            //如果有数据解码出来
+            if (got_picture) {
+                //数据保存在pFrameRGB中
+                sws_scale(img_convert_ctx,
+                        (uint8_t const * const *) pFrame->data,
+                        pFrame->linesize, 0, pCodecCtx->height, pFrameRGB->data,
+                        pFrameRGB->linesize);
+                //把pFrameRGB中的数据保存到文件中
+                SaveFrame(pFrameRGB, pCodecCtx->width,pCodecCtx->height,index++); //保存图片
+                if (index > 50) return 0; //这里我们就保存50张图片
             }
         }
         av_free_packet(packet);
@@ -132,8 +163,10 @@ int main()
     av_free(pFrameRGB);
     avcodec_close(pCodecCtx);
     avformat_close_input(&pFormatCtx);
+
     return 0;
 }
+
 
 #if 0
 使用ffmpeg步骤
