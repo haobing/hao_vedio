@@ -168,6 +168,150 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+保存为YUV--------------------------------------------------------------------------------------------------------------
+
+#include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
+#include "libavutil/pixfmt.h"
+#include "libswscale/swscale.h"
+#include<stdio.h>
+void write_frame(AVFrame *frame,FILE *fp)
+{
+    for (int i = 0; i < frame->height; i++)
+    {
+        fwrite(frame->data[0] + frame->linesize[0] * i, 1, frame->width, fp);
+    }
+
+    for (int i = 0; i < frame->height / 2; i++)
+    {
+        fwrite(frame->data[1] + frame->linesize[1] * i, 1, frame->width / 2, fp);
+    }
+
+    for (int i = 0; i < frame->height / 2; i++)
+    {
+        fwrite(frame->data[2] + frame->linesize[2] * i, 1, frame->width / 2, fp);
+    }
+}
+
+int main()
+{
+AVFormatContext *pFormatCtx;
+int i,videoindex = -1;
+AVCodecContext *pCodecCtx;
+AVCodec *pCodec;
+AVFrame *pFrame,*pFrameYUV;
+AVPacket *packet;
+unsigned char *buf;
+struct SwsContext *img_convert_ctx;
+FILE *file;
+char *path ="pra.mp4";
+int ret,got_picture;
+
+av_register_all();
+
+pFormatCtx = avformat_alloc_context();
+avformat_network_init();
+if(avformat_open_input(&pFormatCtx,path,NULL,NULL)!=0)
+{
+    printf("avformat_open_input error\n");
+    return -1;
+}
+ret =avformat_find_stream_info(pFormatCtx,NULL);
+if(ret<0)
+{
+    printf("avformat_find_stream_info error\n");
+    return -1;
+}
+
+for(i=0; i<pFormatCtx->nb_streams;i++)
+{
+    if(pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+    {
+        videoindex = i;
+        break;
+    }
+}
+
+if(videoindex == -1)
+{
+    printf("can't find a video stream\n");
+    return -1;
+}
+
+pCodecCtx = pFormatCtx->streams[videoindex]->codec;
+pCodec = avcodec_find_decoder(pCodecCtx->codec_id);
+if(pCodec == NULL)
+{
+    printf("can't find a decoder\n");
+    return -1;
+}
+printf("the pCodecCtx->time_base.den=%d\n",pCodecCtx->time_base.den);
+ret = avcodec_open2(pCodecCtx,pCodec,NULL);
+if(ret < 0)
+{
+    printf("can't open codec\n");
+    return -1;
+}
+
+pFrame = av_frame_alloc();
+pFrameYUV = av_frame_alloc();
+
+int numbyte = avpicture_get_size(PIX_FMT_YUV420P,pCodecCtx->width,pCodecCtx->height);
+buf = (unsigned char *)av_malloc(numbyte);
+avpicture_fill((AVPicture*)pFrameYUV,buf,PIX_FMT_YUV420P,pCodecCtx->width,pCodecCtx->height);
+
+int ysize = pCodecCtx->width*pCodecCtx->height;
+
+packet = (AVPacket *)av_malloc(sizeof(AVPacket));
+//av_new_packet(packet,ysize);
+av_dump_format(pFormatCtx,0,path,0);
+
+img_convert_ctx = sws_getContext(pCodecCtx->width,pCodecCtx->height,pCodecCtx->pix_fmt,pCodecCtx->width,pCodecCtx->height,PIX_FMT_YUV420P,SWS_BICUBIC, NULL, NULL, NULL);
+file = fopen("outputs.yuv","wb");
+while((ret = av_read_frame(pFormatCtx,packet))>=0)
+{
+    if(packet->stream_index == videoindex)
+    {   printf("***********\n");
+        ret = avcodec_decode_video2(pCodecCtx,pFrame,&got_picture,packet);
+        if(ret<0)
+        {
+            printf("decode error\n");
+            return -1;
+        }
+        printf("got_pictuer =%d",got_picture);
+        if(got_picture)
+        {   
+           //write_frame(pFrame,file);
+            #if 1
+            sws_scale(img_convert_ctx,(unsigned char const* const*)pFrame->data,pFrame->linesize,0,pCodecCtx->height,pFrameYUV->data,pFrameYUV->linesize);
+            int y_size = pCodecCtx->width*pCodecCtx->height;
+            #if 0
+            fprintf(file,"P6\n%d %d\n255\n",pCodecCtx->width,pCodecCtx->height);
+            int y;
+            for(y=0;y<pCodecCtx->height;y++)
+            {
+                fwrite(pFrameYUV->data[0]+y*pFrameYUV->linesize[0],1,pCodecCtx->width*3,file);
+            }
+            break;
+            #endif
+            #if 1
+            fwrite(pFrameYUV->data[0],1,y_size,file);
+            fwrite(pFrameYUV->data[1],1,y_size/4,file);
+            fwrite(pFrameYUV->data[2],1,y_size/4,file);
+            break;
+            #endif
+            #endif
+        }
+    }
+    av_free_packet(packet);
+}
+printf("the ret =%d index =%d\n",ret,videoindex);
+    av_free(pFrameYUV);
+	avcodec_close(pCodecCtx);
+	avformat_close_input(&pFormatCtx);
+}
+
+
 
 #if 0
 使用ffmpeg步骤
