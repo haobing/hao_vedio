@@ -1,0 +1,114 @@
+
+#include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
+#include "libavutil/pixfmt.h"
+#include "libswscale/swscale.h"
+#include<stdio.h>
+
+int main()
+{
+    AVOutputFormat *ofmt = NULL;
+    AVFormatContext *ifmt_ctx,*ofmt_ctx;
+    AVPacket pkt;
+    const char *infile = "pra.mp4",*outfile = "change.flv";
+    int ret, i;
+    av_register_all();
+   ifmt_ctx = avformat_alloc_context();
+    ret = avformat_open_input(&ifmt_ctx,infile,0,0);
+    if(ret < 0)
+    {
+        printf("faild to open input\n");
+        return 0;
+    }
+
+    ret = avformat_find_stream_info(ifmt_ctx,0);
+    if(ret < 0)
+    {
+        printf("faild to retrieve input stream information\n");
+        return 0;
+    }
+
+    ret =  avformat_alloc_output_context2(&ofmt_ctx,NULL,NULL,outfile);
+    if(!ofmt_ctx)
+    {
+        printf("avformat alloc output context error\n");
+        return 0;
+    }
+    ofmt  = ofmt_ctx->oformat;
+    #if 1
+    for(i =0;i<ifmt_ctx->nb_streams;i++)
+    {
+        AVStream *instream = ifmt_ctx->streams[i];
+        
+        AVStream *outstream = avformat_new_stream(ofmt_ctx,instream->codec->codec);
+        outstream->time_base = instream->time_base;
+        if(!outstream)
+        {
+            printf("avformat new stream faild\n");
+            return 0;
+        }
+
+        ret = avcodec_copy_context(outstream->codec,instream->codec);
+        if(ret < 0)
+        {
+            printf("faild to copy context from input to output stream codec context\n");
+            return 0;
+        }
+        outstream->codec->codec_tag = 0;
+        if(ofmt_ctx->oformat->flags&AVFMT_GLOBALHEADER)
+        {
+            outstream->codec->flags |= CODEC_FLAG_GLOBAL_HEADER;
+        }
+    }
+    av_dump_format(ofmt_ctx,0,outfile,1);
+
+    if(!(ofmt->flags&AVFMT_NOFILE))
+    {
+        ret = avio_open(&ofmt_ctx->pb,outfile,AVIO_FLAG_WRITE);
+        if(ret < 0)
+        {
+            printf("can't open outfile\n");
+            return 0;
+        }
+    }
+
+    ret = avformat_write_header(ofmt_ctx,NULL);
+    int frame_index = 0;
+    //av_new_packet(&pkt,ifmt_ctx->streams[0]->codec->width*ifmt_ctx->streams[0]->codec->height);
+    
+    while(1)
+    {
+        AVStream *instream,*outstream;
+        ret = av_read_frame(ifmt_ctx,&pkt);
+        if(ret <0)
+        {
+            break;
+        }
+        instream = ifmt_ctx->streams[0];
+        outstream = ofmt_ctx->streams[0];
+
+        pkt.pts = av_rescale_q_rnd(pkt.pts,instream->time_base,outstream->time_base,(AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX));
+        pkt.dts = av_rescale_q_rnd(pkt.dts,instream->time_base,outstream->time_base,(AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX));
+        pkt.duration = av_rescale_q(pkt.duration,instream->time_base,outstream->time_base);
+       // printf("the duration = %d\n",pkt.duration);
+        pkt.pos = -1;
+
+        ret = av_interleaved_write_frame(ofmt_ctx,&pkt);
+        if(ret < 0)
+        {
+            printf("error muxing packet\n");
+            break;
+        }
+        av_free_packet(&pkt);
+        frame_index++;
+    }
+    #endif
+    av_write_trailer(ofmt_ctx);
+    
+    avformat_close_input(&ifmt_ctx);
+    if(ofmt_ctx&&!(ofmt->flags&AVFMT_NOFILE))
+    {
+        avio_close(ofmt_ctx->pb); 
+    }
+    avformat_free_context(ofmt_ctx);
+}
