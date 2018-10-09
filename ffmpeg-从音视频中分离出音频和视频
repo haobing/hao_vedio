@@ -1,5 +1,6 @@
 
 
+
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
 #include "libavutil/pixfmt.h"
@@ -25,6 +26,7 @@ int main()
 
     av_register_all();
 
+//打开输入文件
     if((ret = avformat_open_input(&ifmt_ctx,in_file,0,0))<0)
     {
         printf("could not open input file\n");
@@ -37,6 +39,7 @@ int main()
         return 0;
     }
 
+//打开输出视频文件
     ret = avformat_alloc_output_context2(&ofmt_ctx_v,NULL,NULL,out_file_v);
     if(ret < 0)
     {
@@ -45,6 +48,7 @@ int main()
     }
     ofmt_v = ofmt_ctx_v->oformat;
 
+//打开输出音频文件
     ret = avformat_alloc_output_context2(&ofmt_ctx_a,NULL,NULL,out_file_a);
     if(ret <0)
     {
@@ -53,6 +57,7 @@ int main()
     }
     ofmt_a = ofmt_ctx_a->oformat;
 
+//填充两个输出文件的AVStream
     for(i=0;i<ifmt_ctx->nb_streams;i++)
     {
         AVFormatContext *ofmt_ctx;
@@ -94,6 +99,7 @@ int main()
     printf("\n==============input video============\n");
     av_dump_format(ifmt_ctx,0,in_file,0);
 
+//填充两个输出文件的pb指针
     avio_open(&ofmt_ctx_v->pb,out_file_v,AVIO_FLAG_WRITE);
     avio_open(&ofmt_ctx_a->pb,out_file_a,AVIO_FLAG_WRITE);
 
@@ -106,6 +112,7 @@ int main()
     {
         AVFormatContext *ofmt_ctx;
         AVStream *in_stream,*out_stream;
+        //读一帧
         if(av_read_frame(ifmt_ctx,&pkt)<0)
         {
             break;
@@ -113,6 +120,7 @@ int main()
 
         in_stream = ifmt_ctx->streams[pkt.stream_index];
 
+//判断是音频还是视频并写入相应输出文件
         if(pkt.stream_index == videoindex)
         {
             out_stream = ofmt_ctx_v->streams[0];
