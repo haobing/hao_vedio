@@ -1,5 +1,6 @@
 
 
+
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
 #include "libavutil/pixfmt.h"
@@ -25,6 +26,7 @@ int main()
 
     av_register_all();
 
+//打开音频和视频输入文件
     avformat_open_input(&ifmt_ctx_v,in_file_v,0,0);
     avformat_find_stream_info(ifmt_ctx_v,0);
 
@@ -38,6 +40,7 @@ int main()
     avformat_alloc_output_context2(&ofmt_ctx,NULL,NULL,out_file);
     ofmt = ofmt_ctx->oformat;
 
+//建立音频和视频对应的AVStream并填充
     for(i=0;i<ifmt_ctx_v->nb_streams;i++)
     {
         AVStream *in_stream,*out_stream;
@@ -84,6 +87,7 @@ int main()
     av_dump_format(ofmt_ctx,0,out_file,1);
     printf("\n=====================================================\n");
 
+//填充pb指针
     avio_open(&ofmt_ctx->pb,out_file,AVIO_FLAG_WRITE);
 
     avformat_write_header(ofmt_ctx,NULL);
@@ -159,6 +163,7 @@ int main()
 
         }
 
+//填充AVPacket的参数
         //av_bitstream_filter_filter(h264bsfc, in_stream->codec, NULL, &pkt.data, &pkt.size, pkt.data, pkt.size, 0);
         av_bitstream_filter_filter(aacbsfc, out_stream->codec, NULL, &pkt.data, &pkt.size, pkt.data, pkt.size, 0);
 
@@ -168,6 +173,7 @@ int main()
 		pkt.pos = -1;
 		pkt.stream_index=stream_index;
 
+//将AVPacket写入AVFormatContext结构体
         av_interleaved_write_frame(ofmt_ctx,&pkt);
 
         av_free_packet(&pkt);
@@ -185,6 +191,7 @@ int main()
 
     return 0;
 }
+
 
 
  
