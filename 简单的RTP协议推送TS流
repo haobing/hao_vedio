@@ -3,7 +3,8 @@
 #include<sys/types.h>
 #include<sys/socket.h>
 #include<netinet/in.h>
-
+    //主机序小端：高位在高地址，低位在低地址；
+    //网络序为大端：高位在低地址，低位在高地址；
 #define TS_PACKET_SIZE 188
 #define MTU 1500
 #if 1
@@ -39,9 +40,8 @@ void init_rtp_header(struct rtp_header *h)
 #if 0
 void WriteIntBit(unsigned char *data,int num,int len)
 {
-    //主机序的num为小端：高位在高地址，低位在低地址；
-    //data为网络序为大端：高位在低地址，低位在高地址；
-    //本函数主要是将num的小端转换为data的大端。
+
+
     int i = 0;
     for(i=0;i<len;i++)
     {
