@@ -10,10 +10,11 @@
 #if 1
 #pragma pack(1)
 struct rtp_header{
-    unsigned char cc:4;
+    unsigned char cc:4;//低位
     unsigned char x:1;
     unsigned char p:1;
-    unsigned char v:2;
+    unsigned char v:2;//高位
+    
     unsigned char pt:7;
     unsigned char m:1;
 
