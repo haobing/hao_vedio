@@ -1,30 +1,33 @@
+
+//本程序用了位域和位操作两种方式打包RTP头部
+
 #include<stdio.h>
 #include<string.h>
 #include<sys/types.h>
 #include<sys/socket.h>
 #include<netinet/in.h>
-    //主机序小端：高位在高地址，低位在低地址；
-    //网络序为大端：高位在低地址，低位在高地址；
+
 #define TS_PACKET_SIZE 188
 #define MTU 1500
 #if 1
 #pragma pack(1)
-struct rtp_header{
-    unsigned char cc:4;//低位
-    unsigned char x:1;
-    unsigned char p:1;
-    unsigned char v:2;//高位
-    
-    unsigned char pt:7;
-    unsigned char m:1;
-
-    unsigned short sequence_number;
-    unsigned int timestamp;
-    unsigned int ssrc;
-};
-
 
 static i=1;
+#if 0
+struct rtp_header{
+	unsigned char cc:4;
+	unsigned char x:1;
+	unsigned char p:1;
+	unsigned char v:2;
+	
+	unsigned char pt:7;
+	unsigned char m:1;
+ 
+	unsigned short sequence_number;
+	unsigned int timestamp;
+	unsigned int ssrc;
+};
+
 void init_rtp_header(struct rtp_header *h)
 {
     h->v = 2;
@@ -34,15 +37,31 @@ void init_rtp_header(struct rtp_header *h)
 	h->m = 0;
 	h->pt = 33;
 	h->sequence_number = i++;
-	h->timestamp = 12;
-	h->ssrc = 123;
+	h->timestamp = htonl(123);//htonl将主机序转换为网络序
+	h->ssrc = htonl(123);
 
 }
-#if 0
+#endif
+#if 1
+struct rtp_header{
+    unsigned char cc;
+    unsigned char x;
+    unsigned char p;
+    unsigned char v;
+    unsigned char pt;
+    unsigned char m;
+
+    unsigned short sequence_number;
+    unsigned int timestamp;
+    unsigned int ssrc;
+};
+#endif
+
 void WriteIntBit(unsigned char *data,int num,int len)
 {
-
-
+    //主机序的num为小端：高位在高地址，低位在低地址；
+    //data为网络序为大端：高位在低地址，低位在高地址；
+    //本函数主要是将num的小端转换为data的大端。
     int i = 0;
     for(i=0;i<len;i++)
     {
@@ -61,29 +80,24 @@ void pack_rtp_header(struct rtp_header header,unsigned char *data)
 
     pdata[1] |= (header.m&0x1)<<7;
     pdata[1] |= header.pt&0x7f;
-
     WriteIntBit(pdata+2,header.sequence_number,2);
     WriteIntBit(pdata+4,header.timestamp,4);
     WriteIntBit(pdata+8,header.ssrc,4);
 }
-void sequence_number_increase(struct rtp_header *header){
-    unsigned short sequence = ntohs(header->sequence_number);
-    sequence++;
-    header->sequence_number = htons(sequence);
-}
-#endif
+
+
 int main()
 {
     unsigned char buf[2048];
     unsigned int count = 12;
     struct rtp_header header;
-    header.v = 1;
+    header.v = 2;
     header.p = 0;
     header.x = 0;
     header.cc = 0;
     header.m = 0;
     header.pt = 33;
-    header.sequence_number = 123;
+    header.sequence_number = i;
     header.timestamp =123;
     header.ssrc = 123;
 
@@ -96,7 +110,8 @@ int main()
 
     FILE *fp =fopen("./pra.ts","rb");
     memset(buf,0,2048);
-   init_rtp_header((struct rtp_header*)buf);
+   //init_rtp_header((struct rtp_header*)buf);
+   pack_rtp_header(header,buf);
     while(!feof(fp))
     {
         int read_len = fread(buf+count,1,TS_PACKET_SIZE,fp);
@@ -110,9 +125,10 @@ int main()
         if(count+TS_PACKET_SIZE>MTU)
         {
             sendto(sockfd,buf,count,0,(struct sockaddr*)&server,sizeof(server));
-            //sequence_number_increase((struct rtp_header*)buf);
             memset(buf,0,2048);
-            init_rtp_header((struct rtp_header*)buf);
+            header.sequence_number = i++;
+            //init_rtp_header((struct rtp_header*)buf);
+            pack_rtp_header(header,buf);
             count = 12;
             usleep(10000);
 
