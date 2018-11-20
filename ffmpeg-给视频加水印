@@ -1,8 +1,37 @@
+把图片1.jpg叠加到test.mp4视频的底部，命令如下：
+
+ffmpeg -i test.mp4 -vf "movie=1.jpg,scale=480:120[watermask];[in][watermask] overlay=1:820[out]" -y out.mp4
+
+参数解析：
+
+-i test.mp4：输入文件是test.mp4；
+
+movie=1.jpg ：需要叠加的图片是1.jpg；
+
+scale=480:120：图片在视频中显示的宽高；
+
+overlay=1:820：图片距视频左侧1个像素，距视频顶部820个像素；
+
+out.mp4：新生成的视频名字是out.mp4；
+
+-y：覆盖已有的生成文件。
+
+#include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
+#include "libavutil/pixfmt.h"
+#include "libswscale/swscale.h"
+#include "libavutil/opt.h"
+#include "libavfilter/avfiltergraph.h"
+#include "libavfilter/buffersink.h"
+#include "libavfilter/buffersrc.h"
+
+#include<stdio.h>
+
 AVFilterContext *buffersink_ctx;
 AVFilterContext *buffersrc_ctx;
 AVFilterGraph *filter_graph;
 //const char *filter_desrc = "drawtext=fontfile=/usr/share/fonts/lyx/eufm10.ttf:fontcolor=red:fontsize=30:text='Lei Xiaohuafdsfsdfsdf':x=50:y=50";
-const char *filter_desrc = "movie=my_logo.png[wm];[in][wm]overlay=5:5[out]";
+const char *filter_desrc = "movie=my_logo.png,scale=110:45[wm];[in][wm] overlay=5:5[out]";
 
 int init_filters(const char *filters_descr,AVCodecContext *pCodecCtx)
 {
@@ -79,7 +108,7 @@ int main()
     const char *file = "pra.mp4";
     int ret,i;
     int videoindex = 1;
-
+    printf("fdfsssss**************************************\n");
     av_register_all();
     avfilter_register_all();
    pFormatCtx = avformat_alloc_context();
